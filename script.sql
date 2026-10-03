@@ -646,3 +646,109 @@ SELECT
 -- linhas_staging: 9064 | linhas_fato: 9064
 -- total_spent_staging e total_spent_fato devem ser rigorosamente idênticos.
 
+-----------------------------------------------------
+-- Fase 7 — Cursor não vinculado com consulta dinâmica
+-- Enunciado 13: 
+-- Escreva um bloco anônimo PL/pgSQL (DO), sem criar função nem procedimento, que produza
+-- um ranking de receita para cada uma das três dimensões pequenas do DW: item, payment e
+-- location, nessa ordem, em uma única execução. Requisitos obrigatórios:
+-- a) deve existir um único cursor, não vinculado: declarado como REFCURSOR, sem consulta
+-- no DECLARE;
+-- b) o bloco percorre os nomes das três dimensões com um laço, à escolha do grupo, e, a cada
+-- volta, guarda o nome da dimensão da vez em uma variável;
+-- c) a cada volta, a consulta é dinâmica: um texto montado por concatenação com essa
+-- variável, que junta dw.fact_sales à tabela dw.dim_dimensão e devolve, para cada valor
+-- do atributo de mesmo nome, a quantidade de vendas e a receita (soma de total_spent),
+-- da maior para a menor receita;
+-- d) a cada volta, o cursor é aberto com OPEN ... FOR EXECUTE, percorrido com FETCH em um
+-- LOOP, com saída por EXIT WHEN NOT FOUND, e fechado com CLOSE antes de ser reaberto
+-- com a consulta da dimensão seguinte;
+-- e) antes de percorrer as dimensões, o bloco calcula a receita total da fato; a cada
+-- linha lida, emite um RAISE NOTICE no formato <dimensão> | <posição> - <valor>:
+-- <vendas> vendas, receita <receita> (<percentual>% do total), com o percentual
+-- arredondado para duas casas;
+-- f) ao terminar cada dimensão, emite um RAISE NOTICE com a quantidade de linhas lidas
+-- naquela dimensão; ao terminar as três, emite um último com o total de linhas lidas.
+-- Para cada dimensão, a soma dos percentuais exibidos deve ser 100%, com diferença apenas
+-- de arredondamento.
+-- No mercado: SQL dinâmico com responsa
+-----------------------------------------------------
+
+DO $$
+DECLARE
+    -- a) Único cursor não vinculado (REFCURSOR sem consulta vinculada no DECLARE)
+    c_dw REFCURSOR;
+    
+    -- Vetor contendo a ordem exata das três dimensões pequenas
+    v_dims TEXT[] := ARRAY['item', 'payment', 'location'];
+    v_dim TEXT;
+    v_col TEXT;
+    v_sql TEXT;
+    
+    -- Variáveis de destino para o FETCH
+    v_valor VARCHAR(100);
+    v_vendas BIGINT;
+    v_receita NUMERIC(12,2);
+    
+    -- Variáveis de controle, totais e percentuais
+    v_receita_total NUMERIC(12,2);
+    v_percentual NUMERIC(6,2);
+    v_posicao INTEGER;
+    v_linhas_dim INTEGER;
+    v_total_linhas_lidas INTEGER := 0;
+BEGIN
+    -- e) Calcula a receita total da fato antes de iniciar a varredura das dimensões
+    SELECT SUM(total_spent) INTO v_receita_total FROM dw.fact_sales;
+    
+    -- b) Percorre os nomes das três dimensões com um laço FOREACH
+    FOREACH v_dim IN ARRAY v_dims LOOP
+        v_posicao := 0;
+        v_linhas_dim := 0;
+        
+        -- Mapeia a coluna descritiva do atributo (payment_method para 'payment', item/location para os demais)
+        IF v_dim = 'payment' THEN
+            v_col := 'payment_method';
+        ELSE
+            v_col := v_dim;
+        END IF;
+        
+        -- c) Montagem dinâmica da consulta SQL por concatenação de strings
+        v_sql := 'SELECT d.' || v_col || '::VARCHAR, COUNT(*)::BIGINT, SUM(f.total_spent)::NUMERIC(12,2) ' ||
+                 'FROM dw.fact_sales f ' ||
+                 'JOIN dw.dim_' || v_dim || ' d ON d.' || v_dim || '_sk = f.' || v_dim || '_sk ' ||
+                 'GROUP BY d.' || v_col || ' ' ||
+                 'ORDER BY SUM(f.total_spent) DESC';
+                 
+        -- d) Abertura do cursor com a consulta dinâmica
+        OPEN c_dw FOR EXECUTE v_sql;
+        
+        LOOP
+            -- d) Leitura registro a registro com FETCH e condição de parada
+            FETCH c_dw INTO v_valor, v_vendas, v_receita;
+            EXIT WHEN NOT FOUND;
+            
+            v_posicao := v_posicao + 1;
+            v_linhas_dim := v_linhas_dim + 1;
+            
+            -- e) Cálculo da participação percentual individual sobre a receita total
+            v_percentual := ROUND((v_receita / v_receita_total) * 100, 2);
+            
+            -- e) Exibição formatada das métricas no painel de mensagens do pgAdmin
+            RAISE NOTICE '% | % - %: % vendas, receita % (%%% do total)', 
+                v_dim, v_posicao, v_valor, v_vendas, v_receita, v_percentual;
+        END LOOP;
+        
+        -- d) Fechamento do cursor antes de avançar para a dimensão seguinte
+        CLOSE c_dw;
+        
+        v_total_linhas_lidas := v_total_linhas_lidas + v_linhas_dim;
+        
+        -- f) Emissão do total de linhas lidas na dimensão atual
+        RAISE NOTICE 'Linhas lidas na dimensão %: %', v_dim, v_linhas_dim;
+    END LOOP;
+    
+    -- f) Emissão do total geral acumulado das três dimensões
+    RAISE NOTICE 'Total geral de linhas lidas nas três dimensões: %', v_total_linhas_lidas;
+END $$;
+
+
