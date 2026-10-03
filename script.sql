@@ -158,3 +158,99 @@ FROM raw.cafe_sales;
 -- em tudo menos na chave. Depois, na Fase 5, os valores recuperáveis são recuperados e só as linhas
 -- completas seguem para a tabela final.
 -----------------------------------------------------
+
+-----------------------------------------------------
+-- Enunciado 6:
+-- Crie staging.cafe_tipada conforme a Tabela 6 e carregue-a a partir de raw.cafe_sales
+-- com um único INSERT ... SELECT, precedido de TRUNCATE. Em todas as colunas, aplique
+-- TRIM e transforme '', 'ERROR' e 'UNKNOWN' em NULL antes de qualquer conversão; converta
+-- as colunas numéricas com CAST e a data com TO_DATE no formato 'YYYY-MM-DD'. Em seguida,
+-- escreva uma consulta que conte os NULL de cada coluna da tabela tipada. Para cada coluna,
+-- o total deve ser igual à soma qtd_error + qtd_unknown + qtd_vazio obtida no Enunciado
+-- 5.
+-----------------------------------------------------
+
+
+-- 1. DDL — Criação da tabela staging.cafe_tipada (Tabela 6)
+DROP TABLE IF EXISTS staging.cafe_tipada CASCADE;
+
+CREATE TABLE staging.cafe_tipada (
+    transaction_id VARCHAR(20) PRIMARY KEY,
+    item VARCHAR(20),
+    quantity INTEGER,
+    price_per_unit NUMERIC(6,2),
+    total_spent NUMERIC(8,2),
+    payment_method VARCHAR(20),
+    location VARCHAR(20),
+    transaction_date DATE
+);
+
+-- 2. Limpeza prévia e carga com unificação de marcadores de sujeira em NULL e conversão de tipos
+TRUNCATE TABLE staging.cafe_tipada;
+
+INSERT INTO staging.cafe_tipada (
+    transaction_id,
+    item,
+    quantity,
+    price_per_unit,
+    total_spent,
+    payment_method,
+    location,
+    transaction_date
+)
+SELECT 
+    TRIM(transaction_id) AS transaction_id,
+    
+    NULLIF(NULLIF(NULLIF(TRIM(item), 'ERROR'), 'UNKNOWN'), '') AS item,
+    
+    CAST(
+        NULLIF(NULLIF(NULLIF(TRIM(quantity), 'ERROR'), 'UNKNOWN'), '') 
+        AS INTEGER
+    ) AS quantity,
+    
+    CAST(
+        NULLIF(NULLIF(NULLIF(TRIM(price_per_unit), 'ERROR'), 'UNKNOWN'), '') 
+        AS NUMERIC(6,2)
+    ) AS price_per_unit,
+    
+    CAST(
+        NULLIF(NULLIF(NULLIF(TRIM(total_spent), 'ERROR'), 'UNKNOWN'), '') 
+        AS NUMERIC(8,2)
+    ) AS total_spent,
+    
+    NULLIF(NULLIF(NULLIF(TRIM(payment_method), 'ERROR'), 'UNKNOWN'), '') AS payment_method,
+    
+    NULLIF(NULLIF(NULLIF(TRIM(location), 'ERROR'), 'UNKNOWN'), '') AS location,
+    
+    TO_DATE(
+        NULLIF(NULLIF(NULLIF(TRIM(transaction_date), 'ERROR'), 'UNKNOWN'), ''), 
+        'YYYY-MM-DD'
+    ) AS transaction_date
+
+FROM raw.cafe_sales;
+
+-- 3. Consulta de Validação — Contagem de NULLs por coluna (Formato Lado a Lado / 1 linha)
+SELECT 
+    COUNT(CASE WHEN item IS NULL THEN 1 END) AS null_item,
+    COUNT(CASE WHEN quantity IS NULL THEN 1 END) AS null_quantity,
+    COUNT(CASE WHEN price_per_unit IS NULL THEN 1 END) AS null_price_per_unit,
+    COUNT(CASE WHEN total_spent IS NULL THEN 1 END) AS null_total_spent,
+    COUNT(CASE WHEN payment_method IS NULL THEN 1 END) AS null_payment_method,
+    COUNT(CASE WHEN location IS NULL THEN 1 END) AS null_location,
+    COUNT(CASE WHEN transaction_date IS NULL THEN 1 END) AS null_transaction_date
+FROM staging.cafe_tipada;
+
+-- 3b. Consulta de Validação Alternativa — Formato Vertical (UNION ALL de 7 linhas, idêntico ao Enunciado 5)
+SELECT 'item' AS coluna, COUNT(*) AS total_null FROM staging.cafe_tipada WHERE item IS NULL
+UNION ALL
+SELECT 'quantity', COUNT(*) FROM staging.cafe_tipada WHERE quantity IS NULL
+UNION ALL
+SELECT 'price_per_unit', COUNT(*) FROM staging.cafe_tipada WHERE price_per_unit IS NULL
+UNION ALL
+SELECT 'total_spent', COUNT(*) FROM staging.cafe_tipada WHERE total_spent IS NULL
+UNION ALL
+SELECT 'payment_method', COUNT(*) FROM staging.cafe_tipada WHERE payment_method IS NULL
+UNION ALL
+SELECT 'location', COUNT(*) FROM staging.cafe_tipada WHERE location IS NULL
+UNION ALL
+SELECT 'transaction_date', COUNT(*) FROM staging.cafe_tipada WHERE transaction_date IS NULL;
