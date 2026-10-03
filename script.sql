@@ -507,3 +507,142 @@ SELECT COUNT(*) AS total_dias FROM dw.dim_date;
 
 -- Resultado esperado: 365 linhas (referentes a todos os dias do ano de 2023)
 
+-----------------------------------------------------
+-- Enunciado 11: 
+-- Crie e carregue dw.dim_item, dw.dim_payment e dw.dim_location, com chaves SERIAL e
+-- atributos descritivos UNIQUE. A carga usa DISTINCT sobre staging.cafe_sales; a category
+-- de dim_item vem de staging.cardapio. Confira as três dimensões em uma única consulta
+-- com UNION ALL: esperam-se 8 itens, 4 formas de pagamento e 3 locais, já incluído o valor
+-- 'Unknown'.
+-----------------------------------------------------
+
+-- 1. Dimensão dw.dim_item
+DROP TABLE IF EXISTS dw.dim_item CASCADE;
+
+CREATE TABLE dw.dim_item (
+    item_sk SERIAL PRIMARY KEY,
+    item VARCHAR(20) NOT NULL UNIQUE,
+    category VARCHAR(10) NOT NULL
+);
+
+INSERT INTO dw.dim_item (item, category)
+SELECT DISTINCT 
+    s.item,
+    c.category
+FROM staging.cafe_sales s
+JOIN staging.cardapio c ON s.item = c.item
+ORDER BY s.item;
+
+
+-- 2. Dimensão dw.dim_payment
+DROP TABLE IF EXISTS dw.dim_payment CASCADE;
+
+CREATE TABLE dw.dim_payment (
+    payment_sk SERIAL PRIMARY KEY,
+    payment_method VARCHAR(20) NOT NULL UNIQUE
+);
+
+INSERT INTO dw.dim_payment (payment_method)
+SELECT DISTINCT 
+    payment_method
+FROM staging.cafe_sales
+ORDER BY payment_method;
+
+
+-- 3. Dimensão dw.dim_location
+DROP TABLE IF EXISTS dw.dim_location CASCADE;
+
+CREATE TABLE dw.dim_location (
+    location_sk SERIAL PRIMARY KEY,
+    location VARCHAR(20) NOT NULL UNIQUE
+);
+
+INSERT INTO dw.dim_location (location)
+SELECT DISTINCT 
+    location
+FROM staging.cafe_sales
+ORDER BY location;
+
+
+-- 4. Consulta de validação consolidada com UNION ALL
+SELECT 'dw.dim_item' AS dimensao, COUNT(*) AS total_registros FROM dw.dim_item
+UNION ALL
+SELECT 'dw.dim_payment', COUNT(*) FROM dw.dim_payment
+UNION ALL
+SELECT 'dw.dim_location', COUNT(*) FROM dw.dim_location;
+
+-- Resultado esperado da validação:
+-- dw.dim_item:     8 registros
+-- dw.dim_payment:  4 registros (Cash, Credit Card, Digital Wallet, Unknown)
+-- dw.dim_location: 3 registros (In-store, Takeaway, Unknown)
+
+-----------------------------------------------------
+-- Enunciado 12: 
+-- Crie dw.fact_sales conforme a Figura 4: transaction_nk como chave primária (dimensão
+-- degenerada), chaves estrangeiras NOT NULL para as quatro dimensões, métricas NOT NULL e
+-- um índice por chave estrangeira. Carregue-a a partir de staging.cafe_sales, precedida de
+-- TRUNCATE: date_sk por formatação da data, sem JOIN; as outras três surrogate keys por JOIN
+-- com as dimensões. Por fim, escreva uma consulta que compare, lado a lado, a quantidade de
+-- linhas e a soma de total_spent da staging e da fato. Os dois pares devem ser iguais.
+-----------------------------------------------------
+
+-- 1. DDL — Criação da Tabela Fato dw.fact_sales
+DROP TABLE IF EXISTS dw.fact_sales CASCADE;
+
+CREATE TABLE dw.fact_sales (
+    transaction_nk VARCHAR(20) PRIMARY KEY, -- Dimensão degenerada
+    date_sk INTEGER NOT NULL REFERENCES dw.dim_date(date_sk),
+    item_sk INTEGER NOT NULL REFERENCES dw.dim_item(item_sk),
+    payment_sk INTEGER NOT NULL REFERENCES dw.dim_payment(payment_sk),
+    location_sk INTEGER NOT NULL REFERENCES dw.dim_location(location_sk),
+    quantity INTEGER NOT NULL,
+    price_per_unit NUMERIC(6,2) NOT NULL,
+    total_spent NUMERIC(8,2) NOT NULL
+);
+
+-- Criação dos índices nas Chaves Estrangeiras (FKs) para otimização de JOINs
+CREATE INDEX idx_fact_sales_date ON dw.fact_sales(date_sk);
+CREATE INDEX idx_fact_sales_item ON dw.fact_sales(item_sk);
+CREATE INDEX idx_fact_sales_payment ON dw.fact_sales(payment_sk);
+CREATE INDEX idx_fact_sales_location ON dw.fact_sales(location_sk);
+
+
+-- 2. Carga precedida de TRUNCATE
+TRUNCATE TABLE dw.fact_sales;
+
+INSERT INTO dw.fact_sales (
+    transaction_nk,
+    date_sk,
+    item_sk,
+    payment_sk,
+    location_sk,
+    quantity,
+    price_per_unit,
+    total_spent
+)
+SELECT 
+    s.transaction_id AS transaction_nk,
+    CAST(TO_CHAR(s.transaction_date, 'YYYYMMDD') AS INTEGER) AS date_sk, -- Sem JOIN (formatação direta)
+    di.item_sk,
+    dp.payment_sk,
+    dl.location_sk,
+    s.quantity,
+    s.price_per_unit,
+    s.total_spent
+FROM staging.cafe_sales s
+JOIN dw.dim_item di ON di.item = s.item
+JOIN dw.dim_payment dp ON dp.payment_method = s.payment_method
+JOIN dw.dim_location dl ON dl.location = s.location;
+
+
+-- 3. Consulta de Validação Comparativa (Lado a Lado)
+SELECT 
+    (SELECT COUNT(*) FROM staging.cafe_sales) AS linhas_staging,
+    (SELECT COUNT(*) FROM dw.fact_sales) AS linhas_fato,
+    (SELECT SUM(total_spent) FROM staging.cafe_sales) AS total_spent_staging,
+    (SELECT SUM(total_spent) FROM dw.fact_sales) AS total_spent_fato;
+
+-- Resultado Esperado:
+-- linhas_staging: 9064 | linhas_fato: 9064
+-- total_spent_staging e total_spent_fato devem ser rigorosamente idênticos.
+
