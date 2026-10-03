@@ -150,4 +150,11 @@ SELECT
     COUNT(CASE WHEN transaction_date IS NULL OR TRIM(transaction_date) = '' THEN 1 END) AS qtd_vazio
 FROM raw.cafe_sales;
 
-
+-----------------------------------------------------
+-- Fase 4 — Staging: tipagem
+-- Começa a transformação: textos viram números e datas, e os três marcadores de
+-- “não sei” viram NULL.
+-- A limpeza será feita em dois degraus. Primeiro, uma tabela tipada e permissiva, que aceita NULL
+-- em tudo menos na chave. Depois, na Fase 5, os valores recuperáveis são recuperados e só as linhas
+-- completas seguem para a tabela final.
+-----------------------------------------------------
