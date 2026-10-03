@@ -751,4 +751,20 @@ BEGIN
     RAISE NOTICE 'Total geral de linhas lidas nas três dimensões: %', v_total_linhas_lidas;
 END $$;
 
+-----------------------------------------------------
+-- Fase 8 — Consultas analíticas
+-- Enunciado 14: 
+-- Mostre, para cada mês, o nome do mês, a quantidade de vendas, a receita e o ticket médio
+-- (arredondado para duas casas), em ordem cronológica.
+-----------------------------------------------------
+
+SELECT 
+    d.month_name AS mes,
+    COUNT(*) AS quantidade_vendas,
+    SUM(f.total_spent) AS receita,
+    ROUND(AVG(f.total_spent), 2) AS ticket_medio
+FROM dw.fact_sales f
+JOIN dw.dim_date d ON f.date_sk = d.date_sk
+GROUP BY d.month, d.month_name
+ORDER BY d.month ASC;
 
