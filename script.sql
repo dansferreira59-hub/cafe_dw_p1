@@ -49,4 +49,105 @@ CREATE TABLE raw.cafe_sales (
 SELECT COUNT(*) FROM raw.cafe_sales; -- Esperado: 10000
 SELECT COUNT(DISTINCT transaction_id) FROM raw.cafe_sales;
 
+-----------------------------------------------------
+-- Fase 3 — Perfilamento da sujeira
+-- Enunciado 4: 
+-- Para cada uma das colunas item, payment_method e location da camada raw, escreva uma
+-- consulta que liste cada valor distinto e a quantidade de linhas em que ele aparece, da maior
+-- para a menor quantidade. Os valores NULL também devem aparecer.
+-----------------------------------------------------
+
+-- 1. Perfilamento distinto da coluna 'item'
+SELECT 
+    item, 
+    COUNT(*) AS quantidade
+FROM raw.cafe_sales
+GROUP BY item
+ORDER BY quantidade DESC;
+
+-- 2. Perfilamento distinto da coluna 'payment_method'
+SELECT 
+    payment_method, 
+    COUNT(*) AS quantidade
+FROM raw.cafe_sales
+GROUP BY payment_method
+ORDER BY quantidade DESC;
+
+-- 3. Perfilamento distinto da coluna 'location'
+SELECT 
+    location, 
+    COUNT(*) AS quantidade
+FROM raw.cafe_sales
+GROUP BY location
+ORDER BY quantidade DESC;
+
+-----------------------------------------------------
+-- Enunciado 5: 
+-- Escreva uma única consulta, usando UNION ALL, que devolva uma linha para cada coluna
+-- da camada raw, exceto transaction_id, com quatro colunas: coluna (o nome da coluna,
+-- como texto), qtd_error, qtd_unknown e qtd_vazio (valor NULL ou texto vazio após TRIM).
+-- O resultado terá sete linhas
+-----------------------------------------------------
+
+SELECT 
+    'item' AS coluna,
+    COUNT(CASE WHEN TRIM(item) = 'ERROR' THEN 1 END) AS qtd_error,
+    COUNT(CASE WHEN TRIM(item) = 'UNKNOWN' THEN 1 END) AS qtd_unknown,
+    COUNT(CASE WHEN item IS NULL OR TRIM(item) = '' THEN 1 END) AS qtd_vazio
+FROM raw.cafe_sales
+
+UNION ALL
+
+SELECT 
+    'quantity' AS coluna,
+    COUNT(CASE WHEN TRIM(quantity) = 'ERROR' THEN 1 END) AS qtd_error,
+    COUNT(CASE WHEN TRIM(quantity) = 'UNKNOWN' THEN 1 END) AS qtd_unknown,
+    COUNT(CASE WHEN quantity IS NULL OR TRIM(quantity) = '' THEN 1 END) AS qtd_vazio
+FROM raw.cafe_sales
+
+UNION ALL
+
+SELECT 
+    'price_per_unit' AS coluna,
+    COUNT(CASE WHEN TRIM(price_per_unit) = 'ERROR' THEN 1 END) AS qtd_error,
+    COUNT(CASE WHEN TRIM(price_per_unit) = 'UNKNOWN' THEN 1 END) AS qtd_unknown,
+    COUNT(CASE WHEN price_per_unit IS NULL OR TRIM(price_per_unit) = '' THEN 1 END) AS qtd_vazio
+FROM raw.cafe_sales
+
+UNION ALL
+
+SELECT 
+    'total_spent' AS coluna,
+    COUNT(CASE WHEN TRIM(total_spent) = 'ERROR' THEN 1 END) AS qtd_error,
+    COUNT(CASE WHEN TRIM(total_spent) = 'UNKNOWN' THEN 1 END) AS qtd_unknown,
+    COUNT(CASE WHEN total_spent IS NULL OR TRIM(total_spent) = '' THEN 1 END) AS qtd_vazio
+FROM raw.cafe_sales
+
+UNION ALL
+
+SELECT 
+    'payment_method' AS coluna,
+    COUNT(CASE WHEN TRIM(payment_method) = 'ERROR' THEN 1 END) AS qtd_error,
+    COUNT(CASE WHEN TRIM(payment_method) = 'UNKNOWN' THEN 1 END) AS qtd_unknown,
+    COUNT(CASE WHEN payment_method IS NULL OR TRIM(payment_method) = '' THEN 1 END) AS qtd_vazio
+FROM raw.cafe_sales
+
+UNION ALL
+
+SELECT 
+    'location' AS coluna,
+    COUNT(CASE WHEN TRIM(location) = 'ERROR' THEN 1 END) AS qtd_error,
+    COUNT(CASE WHEN TRIM(location) = 'UNKNOWN' THEN 1 END) AS qtd_unknown,
+    COUNT(CASE WHEN location IS NULL OR TRIM(location) = '' THEN 1 END) AS qtd_vazio
+FROM raw.cafe_sales
+
+UNION ALL
+
+SELECT 
+    'transaction_date' AS coluna,
+    COUNT(CASE WHEN TRIM(transaction_date) = 'ERROR' THEN 1 END) AS qtd_error,
+    COUNT(CASE WHEN TRIM(transaction_date) = 'UNKNOWN' THEN 1 END) AS qtd_unknown,
+    COUNT(CASE WHEN transaction_date IS NULL OR TRIM(transaction_date) = '' THEN 1 END) AS qtd_vazio
+FROM raw.cafe_sales;
+
 
