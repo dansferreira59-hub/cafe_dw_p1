@@ -254,3 +254,187 @@ UNION ALL
 SELECT 'location', COUNT(*) FROM staging.cafe_tipada WHERE location IS NULL
 UNION ALL
 SELECT 'transaction_date', COUNT(*) FROM staging.cafe_tipada WHERE transaction_date IS NULL;
+
+-----------------------------------------------------
+-- Fase  5 — Staging: recuperação e limpeza
+-- Enunciado 7: 
+-- Crie a tabela staging.cardapio com as colunas item (VARCHAR(20), chave primária), price
+-- (NUMERIC(6,2) NOT NULL) e category (VARCHAR(10) NOT NULL) e insira nela as oito linhas
+-- da Tabela 3.
+-----------------------------------------------------
+
+-- 1. Criação da tabela de referência do cardápio
+DROP TABLE IF EXISTS staging.cardapio CASCADE;
+
+CREATE TABLE staging.cardapio (
+    item VARCHAR(20) PRIMARY KEY,
+    price NUMERIC(6,2) NOT NULL,
+    category VARCHAR(10) NOT NULL
+);
+
+-- 2. Inserção dos 8 itens oficiais do cardápio
+INSERT INTO staging.cardapio (item, price, category) VALUES
+('Cookie', 1.00, 'Comida'),
+('Juice', 3.00, 'Bebida'),
+('Tea', 1.50, 'Bebida'),
+('Sandwich', 4.00, 'Comida'),
+('Coffee', 2.00, 'Bebida'),
+('Smoothie', 4.00, 'Bebida'),
+('Cake', 3.00, 'Comida'),
+('Salad', 5.00, 'Comida');
+
+-- 3. Validação do conteúdo inserido (esperadas 8 linhas)
+SELECT * FROM staging.cardapio;
+
+-----------------------------------------------------
+-- Enunciado 8: 
+-- Aplique à tabela staging.cafe_tipada as regras da Tabela 7, na ordem indicada, com
+-- um UPDATE por regra (a R6 pode usar dois). Use subconsultas sobre staging.cardapio
+-- nas regras R1 e R5. Abaixo de cada UPDATE, registre em comentário a quantidade de linhas
+-- afetadas informada pelo pgAdmin
+-----------------------------------------------------
+
+-- R1: Preço nulo e item conhecido -> Preço ganha o valor do item no cardápio
+UPDATE staging.cafe_tipada
+SET price_per_unit = (
+    SELECT c.price 
+    FROM staging.cardapio c 
+    WHERE c.item = staging.cafe_tipada.item
+)
+WHERE price_per_unit IS NULL 
+  AND item IS NOT NULL;
+
+-- pgAdmin: 479 linhas afetadas
+
+
+-- R2: Preço nulo, quantidade e total conhecidos -> Preço = total_spent / quantity
+UPDATE staging.cafe_tipada
+SET price_per_unit = total_spent / quantity
+WHERE price_per_unit IS NULL 
+  AND quantity IS NOT NULL 
+  AND total_spent IS NOT NULL;
+
+-- pgAdmin: 48 linhas afetadas
+
+
+-- R3: Quantidade nula, preço e total conhecidos -> Quantidade = ROUND(total_spent / price_per_unit)
+UPDATE staging.cafe_tipada
+SET quantity = ROUND(total_spent / price_per_unit)
+WHERE quantity IS NULL 
+  AND price_per_unit IS NOT NULL 
+  AND total_spent IS NOT NULL;
+
+-- pgAdmin: 456 linhas afetadas
+
+
+-- R4: Total nulo, quantidade e preço conhecidos -> Total = quantity * price_per_unit
+UPDATE staging.cafe_tipada
+SET total_spent = quantity * price_per_unit
+WHERE total_spent IS NULL 
+  AND quantity IS NOT NULL 
+  AND price_per_unit IS NOT NULL;
+
+-- pgAdmin: 479 linhas afetadas
+
+
+-- R5: Item nulo e preço conhecido, pertencente a um único item do cardápio -> Item do cardápio
+-- (Ignora os preços ambíguos de 3.00 e 4.00, pois correspondem a mais de um produto)
+UPDATE staging.cafe_tipada
+SET item = (
+    SELECT c.item 
+    FROM staging.cardapio c 
+    WHERE c.price = staging.cafe_tipada.price_per_unit
+)
+WHERE item IS NULL 
+  AND price_per_unit IS NOT NULL
+  AND price_per_unit IN (
+      SELECT price 
+      FROM staging.cardapio 
+      GROUP BY price 
+      HAVING COUNT(*) = 1
+  );
+
+-- pgAdmin: 489 linhas afetadas
+
+
+-- R6a: Forma de pagamento nula -> 'Unknown'
+UPDATE staging.cafe_tipada
+SET payment_method = 'Unknown'
+WHERE payment_method IS NULL;
+
+-- pgAdmin: 3178 linhas afetadas
+
+
+-- R6b: Localização nula -> 'Unknown'
+UPDATE staging.cafe_tipada
+SET location = 'Unknown'
+WHERE location IS NULL;
+
+-- pgAdmin: 3961 linhas afetadas
+
+-----------------------------------------------------
+-- Enunciado 9: 
+-- Crie staging.cafe_sales com as mesmas colunas e tipos da Tabela 6, agora com NOT NULL
+-- em todas elas e com as restrições CHECK (quantity > 0) e CHECK (price_per_unit > 0).
+-- Carregue-a, precedida de TRUNCATE, apenas com as linhas de staging.cafe_tipada que
+-- não têm nenhum valor nulo. Escreva então uma consulta que devolva, em uma única linha,
+-- três colunas: linhas_tipada, linhas_limpas e descartadas. Registre os três números em
+-- comentário.
+-----------------------------------------------------
+
+-- 1. Criação da tabela staging.cafe_sales (mesmos tipos da Tabela 6, com NOT NULL e CHECKs)
+DROP TABLE IF EXISTS staging.cafe_sales CASCADE;
+
+CREATE TABLE staging.cafe_sales (
+    transaction_id VARCHAR(20) PRIMARY KEY,
+    item VARCHAR(20) NOT NULL,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    price_per_unit NUMERIC(6,2) NOT NULL CHECK (price_per_unit > 0),
+    total_spent NUMERIC(8,2) NOT NULL,
+    payment_method VARCHAR(20) NOT NULL,
+    location VARCHAR(20) NOT NULL,
+    transaction_date DATE NOT NULL
+);
+
+-- 2. Carga da tabela precedida de TRUNCATE, selecionando apenas linhas sem NULL
+TRUNCATE TABLE staging.cafe_sales;
+
+INSERT INTO staging.cafe_sales (
+    transaction_id,
+    item,
+    quantity,
+    price_per_unit,
+    total_spent,
+    payment_method,
+    location,
+    transaction_date
+)
+SELECT 
+    transaction_id,
+    item,
+    quantity,
+    price_per_unit,
+    total_spent,
+    payment_method,
+    location,
+    transaction_date
+FROM staging.cafe_tipada
+WHERE item IS NOT NULL
+  AND quantity IS NOT NULL
+  AND price_per_unit IS NOT NULL
+  AND total_spent IS NOT NULL
+  AND payment_method IS NOT NULL
+  AND location IS NOT NULL
+  AND transaction_date IS NOT NULL;
+
+-- 3. Consulta em linha única que calcula linhas_tipada, linhas_limpas e descartadas
+SELECT 
+    (SELECT COUNT(*) FROM staging.cafe_tipada) AS linhas_tipada,
+    (SELECT COUNT(*) FROM staging.cafe_sales) AS linhas_limpas,
+    (SELECT COUNT(*) FROM staging.cafe_tipada) - (SELECT COUNT(*) FROM staging.cafe_sales) AS descartadas;
+
+-- Resultado retornado:
+-- linhas_tipada: 10000
+-- linhas_limpas: 9064
+-- descartadas: 936
+
