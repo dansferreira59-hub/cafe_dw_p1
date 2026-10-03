@@ -438,3 +438,72 @@ SELECT
 -- linhas_limpas: 9064
 -- descartadas: 936
 
+-----------------------------------------------------
+-- Fase  6 — Modelo dimensional
+-- Enunciado 10: 
+-- Consulte a menor e a maior data de venda registradas em staging.cafe_sales. Em seguida,
+-- crie dw.dim_date com as colunas da Figura 4 (date_sk inteiro no formato YYYYMMDD) e
+-- carregue-a com generate_series, gerando todos os dias dos anos completos que cobrem
+-- esse intervalo. Confira a quantidade de linhas geradas.
+-----------------------------------------------------
+
+-- 1. Consulta da menor e maior data registradas na camada staging
+SELECT 
+    MIN(transaction_date) AS menor_data, 
+    MAX(transaction_date) AS maior_data 
+FROM staging.cafe_sales;
+
+-- Resultado esperado em dirty_cafe_sales.csv: 
+-- menor_data: 2023-01-01 | maior_data: 2023-12-31 (cobre o ano completo de 2023)
+
+
+-- 2. DDL — Criação da dimensão dw.dim_date (Figura 4)
+DROP TABLE IF EXISTS dw.dim_date CASCADE;
+
+CREATE TABLE dw.dim_date (
+    date_sk INTEGER PRIMARY KEY, -- Formato YYYYMMDD (ex: 20230101)
+    full_date DATE NOT NULL UNIQUE,
+    day SMALLINT NOT NULL,
+    month SMALLINT NOT NULL,
+    month_name VARCHAR(15) NOT NULL,
+    quarter SMALLINT NOT NULL,
+    year SMALLINT NOT NULL,
+    day_of_week VARCHAR(15) NOT NULL,
+    is_weekend BOOLEAN NOT NULL
+);
+
+
+-- 3. Carga via generate_series cobrindo o ano completo de 2023 (01/01/2023 a 31/12/2023)
+INSERT INTO dw.dim_date (
+    date_sk,
+    full_date,
+    day,
+    month,
+    month_name,
+    quarter,
+    year,
+    day_of_week,
+    is_weekend
+)
+SELECT 
+    CAST(TO_CHAR(d, 'YYYYMMDD') AS INTEGER) AS date_sk,
+    d::DATE AS full_date,
+    EXTRACT(DAY FROM d)::SMALLINT AS day,
+    EXTRACT(MONTH FROM d)::SMALLINT AS month,
+    TO_CHAR(d, 'TMMonth') AS month_name,
+    EXTRACT(QUARTER FROM d)::SMALLINT AS quarter,
+    EXTRACT(YEAR FROM d)::SMALLINT AS year,
+    TO_CHAR(d, 'TMDay') AS day_of_week,
+    EXTRACT(DOW FROM d) IN (0, 6) AS is_weekend
+FROM generate_series(
+    DATE '2023-01-01', 
+    DATE '2023-12-31', 
+    INTERVAL '1 day'
+) g(d);
+
+
+-- 4. Consulta de conferência da quantidade de linhas geradas
+SELECT COUNT(*) AS total_dias FROM dw.dim_date;
+
+-- Resultado esperado: 365 linhas (referentes a todos os dias do ano de 2023)
+
