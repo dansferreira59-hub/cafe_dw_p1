@@ -768,3 +768,19 @@ JOIN dw.dim_date d ON f.date_sk = d.date_sk
 GROUP BY d.month, d.month_name
 ORDER BY d.month ASC;
 
+-----------------------------------------------------
+-- Enunciado 15: 
+-- Mostre o ranking de itens: categoria, item, total de unidades vendidas e receita, da maior
+-- para a menor receita.
+-----------------------------------------------------
+
+SELECT 
+    i.category AS categoria,
+    i.item AS item,
+    SUM(f.quantity) AS total_unidades_vendidas,
+    SUM(f.total_spent) AS receita
+FROM dw.fact_sales f
+JOIN dw.dim_item i ON f.item_sk = i.item_sk
+GROUP BY i.category, i.item
+ORDER BY receita DESC;
+
