@@ -816,3 +816,24 @@ WHERE d.quarter = 4
 GROUP BY i.item
 ORDER BY receita DESC;
 
+-----------------------------------------------------
+-- Enunciado 18: 
+-- Dice. Restrinja o cubo à categoria 'Bebida', às formas de pagamento 'Cash' e 'Digital
+-- Wallet' e aos meses de janeiro a junho. Mostre a receita por item e forma de pagamento
+-- nesse recorte.
+-----------------------------------------------------
+
+SELECT 
+    i.item AS item,
+    p.payment_method AS forma_pagamento,
+    SUM(f.total_spent) AS receita
+FROM dw.fact_sales f
+JOIN dw.dim_item i ON f.item_sk = i.item_sk
+JOIN dw.dim_payment p ON f.payment_sk = p.payment_sk
+JOIN dw.dim_date d ON f.date_sk = d.date_sk
+WHERE i.category = 'Bebida'
+  AND p.payment_method IN ('Cash', 'Digital Wallet')
+  AND d.month BETWEEN 1 AND 6
+GROUP BY i.item, p.payment_method
+ORDER BY receita DESC;
+
