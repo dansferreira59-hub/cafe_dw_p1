@@ -837,3 +837,39 @@ WHERE i.category = 'Bebida'
 GROUP BY i.item, p.payment_method
 ORDER BY receita DESC;
 
+-----------------------------------------------------
+-- Enunciado 19: 
+-- Roll-up. Usando ROLLUP (category, item), mostre a receita por item, os subtotais por
+-- categoria e o total geral, exibindo 'TODAS' e 'TODOS' (com COALESCE) no lugar dos NULL das
+-- linhas de subtotal. Explique em comentário o que representa cada tipo de linha do resultado.
+-----------------------------------------------------
+
+SELECT 
+    COALESCE(i.category, 'TODAS') AS categoria,
+    COALESCE(i.item, 'TODOS') AS item,
+    SUM(f.total_spent) AS receita
+FROM dw.fact_sales f
+JOIN dw.dim_item i ON f.item_sk = i.item_sk
+GROUP BY ROLLUP (i.category, i.item)
+ORDER BY i.category NULLS LAST, i.item NULLS LAST;
+
+/*
+Explicação dos Tipos de Linhas Geradas pelo ROLLUP:
+
+1. Linhas Detalhadas (ex: Categoria = 'Bebida', Item = 'Espresso'):
+   Representam a receita total gerada por um item específico individualmente.
+
+2. Linhas de Subtotal por Categoria (ex: Categoria = 'Bebida', Item = 'TODOS'):
+   Representam o somatório das receitas de todos os itens pertencentes a uma determinada categoria.
+   O valor NULL do agrupamento na coluna 'item' foi substituído por 'TODOS' via COALESCE.
+
+3. Linha de Total Geral (ex: Categoria = 'TODAS', Item = 'TODOS'):
+   Representa a receita geral acumulada de todo o Data Warehouse, englobando todas as categorias e itens.
+   Os valores NULL das colunas 'category' e 'item' foram substituídos por 'TODAS' e 'TODOS' via COALESCE.
+*/
+
+
+
+
+
+
