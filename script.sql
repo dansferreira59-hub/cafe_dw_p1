@@ -800,3 +800,19 @@ JOIN dw.dim_date d ON f.date_sk = d.date_sk
 GROUP BY d.day_of_week, d.is_weekend
 ORDER BY receita DESC;
 
+-----------------------------------------------------
+-- Fase 9 — Operações de cubo
+-- Enunciado 17: 
+-- Slice. Fixe o quarto trimestre e mostre a receita por item nesse trimestre.
+-----------------------------------------------------
+
+SELECT 
+    i.item AS item,
+    SUM(f.total_spent) AS receita
+FROM dw.fact_sales f
+JOIN dw.dim_date d ON f.date_sk = d.date_sk
+JOIN dw.dim_item i ON f.item_sk = i.item_sk
+WHERE d.quarter = 4
+GROUP BY i.item
+ORDER BY receita DESC;
+
