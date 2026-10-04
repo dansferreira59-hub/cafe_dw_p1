@@ -868,8 +868,22 @@ Explicação dos Tipos de Linhas Geradas pelo ROLLUP:
    Os valores NULL das colunas 'category' e 'item' foram substituídos por 'TODAS' e 'TODOS' via COALESCE.
 */
 
+-----------------------------------------------------
+-- Enunciado 20: 
+-- Cubo. Usando CUBE (location, payment), mostre a receita para todas as combinações
+-- de local e forma de pagamento, com os rótulos 'TODOS' nas linhas de subtotal. Registre em
+-- comentário quantas linhas o resultado tem e justifique esse número a partir da quantidade
+-- de valores de cada dimensão.
+-----------------------------------------------------
 
-
-
+SELECT 
+    COALESCE(l.location, 'TODOS') AS localizacao,
+    COALESCE(p.payment_method, 'TODOS') AS forma_pagamento,
+    SUM(f.total_spent) AS receita
+FROM dw.fact_sales f
+JOIN dw.dim_location l ON f.location_sk = l.location_sk
+JOIN dw.dim_payment p ON f.payment_sk = p.payment_sk
+GROUP BY CUBE (l.location, p.payment_method)
+ORDER BY l.location NULLS LAST, p.payment_method NULLS LAST;
 
 
