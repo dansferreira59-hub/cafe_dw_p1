@@ -784,3 +784,19 @@ JOIN dw.dim_item i ON f.item_sk = i.item_sk
 GROUP BY i.category, i.item
 ORDER BY receita DESC;
 
+-----------------------------------------------------
+-- Enunciado 16: 
+-- Mostre, para cada dia da semana, se ele é fim de semana, a quantidade de vendas e a receita,
+-- da maior para a menor receita.
+-----------------------------------------------------
+
+SELECT 
+    d.day_of_week AS dia_semana,
+    d.is_weekend AS fim_de_semana,
+    COUNT(*) AS quantidade_vendas,
+    SUM(f.total_spent) AS receita
+FROM dw.fact_sales f
+JOIN dw.dim_date d ON f.date_sk = d.date_sk
+GROUP BY d.day_of_week, d.is_weekend
+ORDER BY receita DESC;
+
